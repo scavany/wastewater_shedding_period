@@ -176,14 +176,30 @@ for (delay.mean in delay.means) {
     ##       cex=1.2)
     ##dev.off()
     ## get data
+    LoD95 <- 660 # N1 GC/L
     ww.data <- read_csv("NDCampus_ddPCRdata_cleanedrawdata_0s.csv") %>%
         mutate(Date=as.Date(Date,"%m/%d/%Y")) %>%
-        select(Date,N1R1RC,N1R2RC,N1R3RC) %>%
+        select(-WW_flow) %>%
+        ## select(Date,N1R1RC,N1R2RC,N1R3RC) %>%
         drop_na()
-    N1.med <- apply(ww.data[,2:4],1,median)
-    N1.mean <- apply(ww.data[,2:4],1,mean)
-    N1.min <- apply(ww.data[,2:4],1,min)
-    N1.max <- apply(ww.data[,2:4],1,max)
+    N1.med <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,median)
+    N1.mean <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,mean)
+    N1.min <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,min)
+    N1.max <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,max)
+    N1R1RC.D <- ww.data$N1R1RC[ww.data$N1R1RC>0.1]
+    N1R2RC.D <- ww.data$N1R2RC[ww.data$N1R2RC>0.1]
+    N1R3RC.D <- ww.data$N1R3RC[ww.data$N1R3RC>0.1]
+    LoD95RC <- LoD95*ww.data$recovery_efficiency
+    ww.dates.R1D <- ww.data$Date[ww.data$N1R1RC>0.1]
+    ww.dates.R2D <- ww.data$Date[ww.data$N1R2RC>0.1]
+    ww.dates.R3D <- ww.data$Date[ww.data$N1R3RC>0.1]
+    ww.dates.R1ND <- ww.data$Date[ww.data$N1R1RC<0.1]
+    ww.dates.R2ND <- ww.data$Date[ww.data$N1R2RC<0.1]
+    ww.dates.R3ND <- ww.data$Date[ww.data$N1R3RC<0.1]    
+    LoD95RC.R1ND <- LoD95RC[ww.data$N1R1RC<0.1]
+    LoD95RC.R2ND <- LoD95RC[ww.data$N1R2RC<0.1]
+    LoD95RC.R3ND <- LoD95RC[ww.data$N1R3RC<0.1]
+    
     ## pdf("wastewater_data.pdf")
     plotCI(ww.data$Date,N1.med,li=N1.min,ui=N1.max,gap=TRUE,sfrac=0.003,
            xlab="Date",ylab="RNA (N1 GC / 100ml)",xaxs="i",bty="n",las=1,
@@ -234,12 +250,18 @@ for (delay.mean in delay.means) {
         shedding.scaled <- shedding*par[3]
         nbinom.size <- par[4]
         if (sum(shedding.scaled)) {
-            return(-sum(dnbinom(N1.med[ww.data$Date %in% date.exp],size=nbinom.size,
-                                 mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)) -
-                   sum(dnbinom(N1.min[ww.data$Date %in% date.exp],size=nbinom.size,
-                               mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)) -
-                   sum(dnbinom(N1.max[ww.data$Date %in% date.exp],size=nbinom.size,
-                               mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)))
+            return(-sum(dnbinom(N1R1RC.D,size=nbinom.size,
+                                mu=shedding.scaled[date.exp %in% ww.dates.R1D],log=TRUE)) -
+                   sum(dnbinom(N1R2RC.D,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R2D],log=TRUE)) -
+                   sum(dnbinom(N1R3RC.D,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R3D],log=TRUE)) -
+                   sum(pnbinom(LoD95RC.R1ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R1ND],log.p=TRUE)) -
+                   sum(pnbinom(LoD95RC.R2ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R2ND],log.p=TRUE)) -
+                   sum(pnbinom(LoD95RC.R3ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R3ND],log.p=TRUE)))
         } else {
             return(Inf)
         }
@@ -261,16 +283,16 @@ for (delay.mean in delay.means) {
     ## MCMC - with dispersion
     lower <- c(shape=1e-3,rate=1e-3,shedscale=1e-3,
                nbinomsize=1e-3,p.q=0,p.inf.asymp=0)#confint(mle2.profile)[,1]*0.1
-    upper <- c(shape=1e2,rate=1e2,shedscale=1e5,
+    upper <- c(shape=1e3,rate=1e2,shedscale=1e5,
                nbinomsize=1e5,p.q=1,p.inf.asymp=1)#confint(mle2.profile)[,2]*1.9
     bayesianSetup = createBayesianSetup(LL.dispersion,lower=lower,upper=upper)
     mcmc.out = runMCMC(bayesianSetup,
                        settings=list(iterations=1e5))
     pdf(paste0("mcmc_out_quarantine_recovery_",delay.mean,".pdf"))
-    plot(mcmc.out,start = 3000)
+    plot(mcmc.out,start = 5000)
     dev.off()
-    samples = getSample(mcmc.out,start=3000)
-    save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_asymp_delay_pois",floor(1/delay.rate+0.5),".RData"))
+    samples = getSample(mcmc.out,start=5000)
+    save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_asymp_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
     load(paste0("mcmc_quarantine_recovery_asymp_delay_pois",floor(1/delay.rate+0.5),".RData"))
 
     DIC(mcmc.out)$DIC
@@ -327,7 +349,7 @@ for (delay.mean in delay.means) {
 
     ## plot it
     ## pdf(paste0("shedding_distribution_pois_",floor(1/delay.rate+0.5),"_mean_delay.pdf"))
-    pdf(paste0("Fig2_quarantine_recovery_asymp_",delay.mean,".pdf"),width=10,height=10)
+    pdf(paste0("Fig2_quarantine_recovery_asymp_lod_",delay.mean,".pdf"),width=10,height=10)
     layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
     p.enter <- p.inf2test(0:(ncol(shed.dist)-1))
     p.exit <- c(rep(0,quarantine.length),
@@ -346,9 +368,9 @@ for (delay.mean in delay.means) {
             col=adjustcolor("gray",0.5),border=F)
     abline(v=which.max(colMeans(shed.dist[,2:(maxplot.day+1)])),lty="dashed")
     shed.conc.max <- shed.dist.mean[1+which.max(shed.dist.mean[2:(maxplot.day+1)])] ##Change the day of this to the peak of the outbreak, and do the outbreak concentration, not the individual
-    barplot(dnbinom(0:400,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
-            names.arg=0:400,
-            xlab="Shedding intensity (N1 GC / l)")
+    barplot(dnbinom(0:100,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
+            names.arg=0:100,
+            xlab="Measured viral concentration at peak (N1 GC / l)")
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)

@@ -176,20 +176,33 @@ for (delay.mean in delay.means) {
     ##       cex=1.2)
     ##dev.off()
     ## get data
+    LoD95 <- 220 # N1 GC/L
     ww.data <- read_csv("NDCampus_ddPCRdata_cleanedrawdata_0s.csv") %>%
         mutate(Date=as.Date(Date,"%m/%d/%Y")) %>%
-        select(Date,N1R1RC,N1R2RC,N1R3RC) %>%
+        select(-WW_flow) %>%
+        ## select(Date,N1R1RC,N1R2RC,N1R3RC) %>%
         drop_na()
-    N1.med <- apply(ww.data[,2:4],1,median)
-    N1.mean <- apply(ww.data[,2:4],1,mean)
-    N1.min <- apply(ww.data[,2:4],1,min)
-    N1.max <- apply(ww.data[,2:4],1,max)
-    ## N1.mean <- ww.data$separate_mean 
-    ## N1.lower <- ww.data$separate_lower
-    ## N1.upper <- ww.data$separate_upper
+    N1.med <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,median)
+    N1.mean <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,mean)
+    N1.min <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,min)
+    N1.max <- apply(ww.data[,c("N1R1RC","N1R2RC","N1R3RC")],1,max)
+    N1R1RC.D <- ww.data$N1R1RC[ww.data$N1R1RC>0.1]
+    N1R2RC.D <- ww.data$N1R2RC[ww.data$N1R2RC>0.1]
+    N1R3RC.D <- ww.data$N1R3RC[ww.data$N1R3RC>0.1]
+    LoD95RC <- LoD95 / ww.data$recovery_efficiency
+    ww.dates.R1D <- ww.data$Date[ww.data$N1R1RC>0.1]
+    ww.dates.R2D <- ww.data$Date[ww.data$N1R2RC>0.1]
+    ww.dates.R3D <- ww.data$Date[ww.data$N1R3RC>0.1]
+    ww.dates.R1ND <- ww.data$Date[ww.data$N1R1RC<0.1]
+    ww.dates.R2ND <- ww.data$Date[ww.data$N1R2RC<0.1]
+    ww.dates.R3ND <- ww.data$Date[ww.data$N1R3RC<0.1]    
+    LoD95RC.R1ND <- LoD95RC[ww.data$N1R1RC<0.1]
+    LoD95RC.R2ND <- LoD95RC[ww.data$N1R2RC<0.1]
+    LoD95RC.R3ND <- LoD95RC[ww.data$N1R3RC<0.1]
+
     ## pdf("wastewater_data.pdf")
     plotCI(ww.data$Date,N1.med,li=N1.min,ui=N1.max,gap=TRUE,sfrac=0.003,
-           xlab="Date",ylab="RNA (N1 GC / 100ml)",xaxs="i",bty="n",las=1,
+           xlab="Date",ylab="RNA (N1 GC / l)",xaxs="i",bty="n",las=1,
            xaxt="n")
     axis(1,label=FALSE, tcl=0)
     tick.locs <- which(ww.data$Date %in% seq(as.Date("2020-07-01"),as.Date("2021-01-01"),"1 month"))
@@ -198,7 +211,21 @@ for (delay.mean in delay.means) {
     axis(1,at=ww.data$Date[label.locs],label=c("Aug","Sep","Oct","Nov"),tick=FALSE)
     abline(v=as.Date("2020-08-09"),lty="dotted",lwd=2)
     polygon(c(cooling.period,rev(cooling.period)),
-            c(0,0,600,600),border=FALSE,col=adjustcolor("lightblue",0.3))
+            c(0,0,1.5e6,1.5e6),border=FALSE,col=adjustcolor("lightblue",0.3))
+    ## The next bit is the logged version
+    ## plotCI(ww.data$Date,pmax(N1.med,LoD95),li=pmax(N1.min,LoD95),ui=pmax(LoD95,N1.max),
+    ##        gap=TRUE,sfrac=0.003,
+    ##        xlab="Date",ylab="RNA (N1 GC / l)",xaxs="i",bty="n",las=1,
+    ##        xaxt="n",log="y")
+    ## abline(h=LoD95,lty="dashed")
+    ## axis(1,label=FALSE, tcl=0)
+    ## tick.locs <- which(ww.data$Date %in% seq(as.Date("2020-07-01"),as.Date("2021-01-01"),"1 month"))
+    ## axis(1,at=ww.data$Date[tick.locs],label=FALSE)
+    ## label.locs <- which(ww.data$Date %in% seq(as.Date("2020-07-16"),as.Date("2021-01-16"),"1 month"))
+    ## axis(1,at=ww.data$Date[label.locs],label=c("Aug","Sep","Oct","Nov"),tick=FALSE)
+    ## abline(v=as.Date("2020-08-09"),lty="dotted",lwd=2)
+    ## polygon(c(cooling.period,rev(cooling.period)),
+    ##         c(LoD95,LoD95,1.5e6,1.5e6),border=FALSE,col=adjustcolor("lightblue",0.3))
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
@@ -207,10 +234,17 @@ for (delay.mean in delay.means) {
     ## 2. MCMC fitting with BayesianTools
     date.exp <- dates
     quarantine.length <- 10
+    ## Set up proportion quarantining
+    load("./prop_quarantine_iso_only.RData")
+    data.dates <- as.Date(names(prop.q))
+    p.q.vec <- c(rep(0,min(data.dates)-min(date.exp)),
+                 as.numeric(prop.q),
+                 rep(0,max(date.exp)-max(data.dates)))
     NLL.dispersion <- function(par) {
-        shed.shape <- 1 + exp(par[1])
-        shed.rate <- exp(par[2])
-        p.q <- 1/(1+exp(-par[5]))
+        shed.shape <- par[1]
+        shed.rate <- par[2]
+        p.d <- par[5]
+        p.scale.asymp <- 0#par[6]
         shedding <- rep(0,length(n.exp))
         for (jj in 1:(length(n.exp)-1)) {
             cum.dens.0 <- pgamma(0:(length(n.exp)-jj),shed.shape,shed.rate)
@@ -228,20 +262,27 @@ for (delay.mean in delay.means) {
                 p.exit.asymp <- rep(0,length(n.exp)-jj+1)
             }
             ## Make sure interpret the p.q correctly in writing! Is it more like an odds than a proportion?
-            individual.shedding.symp <- individual.shedding * (1 + p.q * (p.exit - p.enter))
-            individual.shedding.asymp <- individual.shedding * (1 + p.q * (p.exit.asymp - p.enter.asymp))
+            p.q <- p.q.vec[jj+1:length(individual.shedding)-1]
+            individual.shedding.symp <- individual.shedding * (1 + p.d * p.q * (p.exit - p.enter))
+            individual.shedding.asymp <- individual.shedding * p.scale.asymp * (1 + p.d * p.q * (p.exit.asymp - p.enter.asymp))
             shedding <- shedding + n.exp.asymp[jj]*c(rep(0,jj-1),individual.shedding.asymp)
             shedding <- shedding + n.exp.symp[jj]*c(rep(0,jj-1),individual.shedding.symp)
         }
-        shedding.scaled <- shedding*exp(par[3])
-        nbinom.size <- exp(par[4])
+        shedding.scaled <- shedding*par[3]/p.d
+        nbinom.size <- par[4]
         if (sum(shedding.scaled)) {
-            return(-sum(dnbinom(N1.med[ww.data$Date %in% date.exp],size=nbinom.size,
-                                 mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)) -
-                   sum(dnbinom(N1.min[ww.data$Date %in% date.exp],size=nbinom.size,
-                               mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)) -
-                   sum(dnbinom(N1.max[ww.data$Date %in% date.exp],size=nbinom.size,
-                               mu=shedding.scaled[date.exp %in% ww.data$Date],log=TRUE)))
+            return(-sum(dnbinom(N1R1RC.D,size=nbinom.size,
+                                mu=shedding.scaled[date.exp %in% ww.dates.R1D],log=TRUE)) -
+                   sum(dnbinom(N1R2RC.D,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R2D],log=TRUE)) -
+                   sum(dnbinom(N1R3RC.D,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R3D],log=TRUE)) -
+                   sum(pnbinom(LoD95RC.R1ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R1ND],log.p=TRUE)) -
+                   sum(pnbinom(LoD95RC.R2ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R2ND],log.p=TRUE)) -
+                   sum(pnbinom(LoD95RC.R3ND,size=nbinom.size,
+                               mu=shedding.scaled[date.exp %in% ww.dates.R3ND],log.p=TRUE)))
         } else {
             return(Inf)
         }
@@ -254,19 +295,19 @@ for (delay.mean in delay.means) {
     ## load(paste0("mle2_delay_pois",floor(1/delay.rate+0.5),".RData"),verbose=TRUE)
 
     ## MCMC - with dispersion
-    lower <- c(logshape=log(1e-2),lograte=log(1e-2),logshedscale=log(1e-1),
-               lognbinomsize=log(1e-3),logitp.q=-1e2)#confint(mle2.profile)[,1]*0.1
-    upper <- c(logshape=log(1e5),lograte=log(1e7),logshedscale=log(1e5),
-               lognbinomsize=log(1e1),logitp.q=1e2)#confint(mle2.profile)[,2]*1.9
+    lower <- c(shape=1,rate=0,shedscale=0,
+               nbinomsize=0,p.d=0)#,p.inf.asymp=0)#confint(mle2.profile)[,1]*0.1
+    upper <- c(shape=1e3,rate=1e3,shedscale=1e5,
+               nbinomsize=1e5,p.d=1)#,p.inf.asymp=1)#confint(mle2.profile)[,2]*1.9
     bayesianSetup = createBayesianSetup(LL.dispersion,lower=lower,upper=upper)
     mcmc.out = runMCMC(bayesianSetup,
                        settings=list(iterations=1e5))
     pdf(paste0("mcmc_out_quarantine_recovery_",delay.mean,".pdf"))
-    plot(mcmc.out,start = 3000)
+    plot(mcmc.out,start = 20000)
     dev.off()
-    samples = getSample(mcmc.out,start=3000)
-    save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_delay_pois",floor(1/delay.rate+0.5),".RData"))
-    load(paste0("mcmc_quarantine_recovery_delay_pois",floor(1/delay.rate+0.5),".RData"))
+    samples = getSample(mcmc.out,start=20000)
+    save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
+    load(paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
 
     DIC(mcmc.out)$DIC
 
@@ -275,12 +316,13 @@ for (delay.mean in delay.means) {
     ## gelmanDiagnostics(mcmc.out, plot = T)
 
     ## 4. plot it
-    shed.shape <- 1 + exp(samples[,1])
-    shed.rate <- exp(samples[,2])
-    shed.scale <- exp(samples[,3])
+    shed.shape <- samples[,1]
+    shed.rate <- samples[,2]
+    shed.scale <- samples[,3]
     maxplot.day <- 30
-    nbinom.size <- exp(samples[,4])
-    p.q <- 1/(1+exp(-samples[,5]))
+    nbinom.size <- samples[,4]
+    p.d <- samples[,5]
+    p.inf.asymp <- rep(0,nrow(samples))#samples[,6]
     shedding <- array(0,dim=c(length(shed.shape),length(n.exp)))
     shed.dist <- array(NA,dim=c(length(shed.shape),maxplot.day+1))
     for (jj in 1:length(shed.shape)) {
@@ -299,15 +341,19 @@ for (delay.mean in delay.means) {
                 p.exit <- rep(0,length(n.exp)-ii+1)
                 p.exit.asymp <- rep(0,length(n.exp)-ii+1)
             }
-            individual.shedding.symp <- individual.shedding * (1 + p.q[jj] * (p.exit - p.enter))
-            individual.shedding.asymp <- individual.shedding * (1 + p.q[jj] * (p.exit.asymp - p.enter.asymp))
+            p.q <- p.q.vec[ii+1:length(individual.shedding)-1]
+            individual.shedding.symp <- individual.shedding * (1 + p.d[jj] * p.q * (p.exit - p.enter))
+            individual.shedding.asymp <- individual.shedding * p.inf.asymp[jj] * (1 + p.d[jj] * p.q * (p.exit.asymp - p.enter.asymp))
             shedding[jj,] <- shedding[jj,] + shed.scale[jj]*n.exp.asymp[ii]*c(rep(0,ii-1),
-                                                                              individual.shedding.asymp)
+                                                                              individual.shedding.asymp) / p.d[jj]
             shedding[jj,] <- shedding[jj,] + shed.scale[jj]*n.exp.symp[ii]*c(rep(0,ii-1),
-                                                                             individual.shedding.symp)
+                                                                             individual.shedding.symp) / p.d[jj]
         }
         shed.dist[jj,] <- dgamma(0:maxplot.day,shed.shape[jj],shed.rate[jj])*shed.scale[jj]
     }
+    save(shed.dist,shedding,file=paste0("shedding_dists_pois",delay.mean,".RData"))
+
+    load(paste0("shedding_dists_pois",delay.mean,".RData"))
 
     ## Prediction interval
     n.samples <- 1e5 
@@ -321,7 +367,7 @@ for (delay.mean in delay.means) {
 
     ## plot it
     ## pdf(paste0("shedding_distribution_pois_",floor(1/delay.rate+0.5),"_mean_delay.pdf"))
-    pdf(paste0("Fig2_quarantine_recovery_",delay.mean,".pdf"),width=10,height=10)
+    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,".pdf"),width=10,height=10)
     layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
     p.enter <- p.inf2test(0:(ncol(shed.dist)-1))
     p.exit <- c(rep(0,quarantine.length),
@@ -331,7 +377,14 @@ for (delay.mean in delay.means) {
          type='l', ylim=c(0,max(apply(shed.dist[,2:(maxplot.day+1)],2,function(x)quantile(x,0.975)))),
          ylab="Shedding intensity (N1 GC / l)",xlab="Time since infection",yaxs="i",las=1,bty="n",
          col="red",lwd=2)
+    ## plot(0:maxplot.day, shed.dist.mean * (1 - p.enter + p.exit),
+    ##      type='l', ylim=c(0.9*LoD95,
+    ##                       max(apply(shed.dist[,2:(maxplot.day+1)],2,function(x)quantile(x,0.975)))),
+    ##      ylab="Shedding intensity (N1 GC / l)",xlab="Time since infection",yaxs="i",las=1,bty="n",
+    ##      col="red",lwd=2,log="y")
+    ## abline(h=LoD95,lty="dashed")
     lines(0:maxplot.day,shed.dist.mean,lwd=2)
+    ## lines(0:maxplot.day,apply(shed.dist,2,median),lwd=2)
     mtext("A",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
@@ -339,10 +392,17 @@ for (delay.mean in delay.means) {
                            rev(apply(shed.dist[,],2,function(x)quantile(x,0.975)))),
             col=adjustcolor("gray",0.5),border=F)
     abline(v=which.max(colMeans(shed.dist[,2:(maxplot.day+1)])),lty="dashed")
-    shed.conc.max <- shed.dist.mean[1+which.max(shed.dist.mean[2:(maxplot.day+1)])] ##Change the day of this to the peak of the outbreak, and do the outbreak concentration, not the individual
-    barplot(dnbinom(0:400,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
-            names.arg=0:400,
-            xlab="Shedding intensity (N1 GC / l)")
+    shed.conc.max <- max(colMeans(shedding))
+    ## barplot(dnbinom(0:10,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
+    ##         names.arg=0:10,
+    ##         xlab="Measured viral concentration at peak (N1 GC / l)")
+    barplot(c(pnbinom(99,size=mean(nbinom.size),mu=shed.conc.max),
+              diff(pnbinom(1:10*100-1,size=mean(nbinom.size),mu=shed.conc.max))),
+            ylab="Proportion of samples",
+            names.arg=paste0(seq(0,900,100),"-",seq(100,1000,100)),
+            xlab="Measured viral concentration at peak (N1 GC / l)")
+
+    dnbinom(0,size=mean(nbinom.size),mu=shed.conc.max)
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
@@ -356,8 +416,12 @@ for (delay.mean in delay.means) {
     lower50 <- apply(pred,2,function(x)quantile(x,0.25))
     upper50 <- apply(pred,2,function(x)quantile(x,0.75))
     plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
-         ylim=c(0,max(N1.max, upper95)),
+         ylim=c(0,max(N1.max)),
          ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
+    ## plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
+    ##      ylim=c(0.9*LoD95,max(N1.max)),log="y",
+    ##      ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
+    ## abline(h=LoD95,lty="dashed")
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
@@ -383,4 +447,56 @@ for (delay.mean in delay.means) {
     (sum((N1.med <= upper50[indices]) & (N1.med >= lower50[indices])) + sum((N1.min <= upper50[indices]) & (N1.min >= lower50[indices])) + sum((N1.max <= upper50[indices]) & (N1.max >= lower50[indices])))/3/sum(indices)
     cor(colMeans(pred)[indices],N1.mean,method="spearman")
     quantile(apply(pred[,indices],1,function(x)cor(x,N1.mean)),c(0.025,0.975))
+
+
+    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,"_log.pdf"),width=10,height=10)
+    layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
+    plot(0:maxplot.day, shed.dist.mean * (1 - p.enter + p.exit),
+         type='l', ylim=c(0.9*min(LoD95RC),
+                          max(apply(shed.dist[,2:(maxplot.day+1)],2,function(x)quantile(x,0.975)))),
+         ylab="Shedding intensity (N1 GC / l)",xlab="Time since infection",yaxs="i",las=1,bty="n",
+         col="red",lwd=2,log="y")
+    ##lines(0:maxplot.day,LoD95RC,lty="dashed")
+    lines(0:maxplot.day,shed.dist.mean,lwd=2)
+    mtext("A",side=3,line=0, 
+          at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
+          cex=1.2)
+    polygon(c(0:30,30:0),c(apply(shed.dist[,],2,function(x)quantile(x,0.025)),
+                           rev(apply(shed.dist[,],2,function(x)quantile(x,0.975)))),
+            col=adjustcolor("gray",0.5),border=F)
+    abline(v=which.max(colMeans(shed.dist[,2:(maxplot.day+1)])),lty="dashed")
+    shed.conc.max <- max(colMeans(shedding))
+    barplot(dnbinom(0:10,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
+            names.arg=0:10,
+            xlab="Measured viral concentration at peak (N1 GC / l)")
+    mtext("B",side=3,line=0, 
+          at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
+          cex=1.2)
+    plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
+         ylim=c(0.9*LoD95,max(N1.max)),log="y",
+         ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
+    lines(ww.data$Date,LoD95RC/3,lty="dashed")
+    mtext("C",side=3,line=0, 
+          at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
+          cex=1.2)
+    plotCI(ww.data$Date,ifelse(N1.med<LoD95,LoD95,N1.med),
+           li=ifelse(N1.max<LoD95,LoD95,N1.max),ui=ifelse(N1.max<LoD95,LoD95,N1.max),
+           add=TRUE,gap=TRUE,sfrac=0.003)
+    lower95 <- ifelse(lower95<LoD95,LoD95,lower95)
+    upper95 <- ifelse(upper95<LoD95,LoD95,upper95)
+    lower50 <- ifelse(lower50<LoD95,LoD95,lower50)
+    upper50 <- ifelse(upper95<LoD95,LoD95,upper50)
+    polygon(c(date.exp,rev(date.exp)),
+            c(lower95,rev(upper95)),
+            col=adjustcolor("gray",0.25),border=F)
+    polygon(c(date.exp,rev(date.exp)),
+            c(lower50,rev(upper50)),
+            col=adjustcolor("gray",0.5),border=F)
+    for (ii in sample(nrow(pred),1,TRUE)) {
+        other.measurements <- sample(nrow(pred),2,TRUE)
+        points(date.exp,(pred[ii,]+colSums(pred[other.measurements,]))/3,
+               col=adjustcolor("red",0.5))
+    }
+    dev.off()    
+
 }
