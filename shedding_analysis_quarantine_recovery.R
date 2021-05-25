@@ -115,17 +115,18 @@ for (delay.mean in delay.means) {
          file=paste0("nexp_delay_pois",floor(1/delay.rate+0.5),".RData"))
     ## pdf("infections.pdf")
     ## par(mfrow=c(2,1))
-    plot(dates,n.exp,bty="n",yaxs="i",xaxs="i",las=1,type="l",col="blue",lwd=1,
+    plot(dates,n.exp.symp,bty="n",yaxs="i",xaxs="i",las=1,type="l",col="blue",lwd=1,
          xlim=c(dates[30],dates[nrow(sts.symp.bp)]),xaxt="n",xlab="Date",
-         ylim=c(0,max(colSums(t(incid$counts)[2:1,]))),ylab="No. Infected")
+         ylim=c(0,max(incid$counts[,"Symptomatic"])),ylab="No. Infected")
     ## plot(sts.symp.bp,xaxis.labelFormat=NULL,legend=NULL,lwd=c(1,1,2),lty=c(1,1,1),main="",
     ##      bty="n",yaxs="i",xaxs="i",las=1,xlim=c(30,nrow(sts.symp.bp)),xaxt="n",xlab="Date")
     tick.locs <- dates[dates %in% seq(as.Date("2020-07-01"),as.Date("2021-01-01"),"1 month")]
     axis(1,at=tick.locs,label=FALSE)
     label.locs <- dates[dates %in% seq(as.Date("2020-07-16"),as.Date("2021-01-16"),"1 month")]
     axis(1,at=label.locs,label=c("Jul","Aug","Sep","Oct","Nov"),tick=FALSE)
-    add_bars(incid$dates,colSums(t(incid$counts)[2:1,]),col="white")
-    lines(dates,n.exp,col=viridis(3)[1],lwd=3)
+    ## add_bars(incid$dates,rowSums(incid$counts),col="white")
+    add_bars(incid$dates,incid$counts[,"Symptomatic"],col="white")
+    lines(dates,n.exp.symp,col=viridis(3)[1],lwd=3)
 ##Do the convolution for the expectation
     mu.symp <- matrix(0,ncol=ncol(sts.symp.bp),nrow=nrow(sts.symp.bp))
                                         #Loop over all series
@@ -148,13 +149,14 @@ for (delay.mean in delay.means) {
         }
     }
                                         #Show the fit
-    lines(dates,mu.symp[,1]+mu.asymp[,1],col=viridis(3)[2],lwd=3,lty="dashed")
+    ## lines(dates,mu.symp[,1]+mu.asymp[,1],col=viridis(3)[2],lwd=3,lty="dashed")
+    lines(dates,mu.symp[,1],col=viridis(3)[2],lwd=3,lty="dashed")
     cooling.period <- dates[dates %in% c(as.Date("2020-08-19"),as.Date("2020-09-02"))]
     polygon(c(cooling.period,rev(cooling.period)),
             c(0,0,200,200),border=FALSE,col=adjustcolor("lightblue",0.4))
     abline(v=as.Date("2020-08-09"),lty="dotted",lwd=2)
     legend("center", lty=c(NA,"solid","dashed"),col=c(NA,viridis(3)[1:2]),fill=c("white",NA,NA),
-           legend=c("Cases","Infections","Predicted Cases"),bty="n",border=c("black",NA,NA),lwd=c(NA,3,3))
+           legend=c("Symptomatic cases","Infections","Predicted Cases"),bty="n",border=c("black",NA,NA),lwd=c(NA,3,3))
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
@@ -199,6 +201,10 @@ for (delay.mean in delay.means) {
     LoD95RC.R1ND <- LoD95RC[ww.data$N1R1RC<0.1]
     LoD95RC.R2ND <- LoD95RC[ww.data$N1R2RC<0.1]
     LoD95RC.R3ND <- LoD95RC[ww.data$N1R3RC<0.1]
+    N1.med.RC <- ifelse(N1.med<LoD95RC,(N1.med+LoD95RC)/2,N1.med)
+    N1.min.RC <- ifelse(N1.min<LoD95RC,(N1.min+LoD95RC)/2,N1.min)
+    N1.max.RC <- ifelse(N1.max<LoD95RC,(N1.max+LoD95RC)/2,N1.max)
+    N1.mean.RC <- (N1.med.RC + N1.min.RC + N1.max.RC)/3
 
     ## pdf("wastewater_data.pdf")
     plotCI(ww.data$Date,N1.med,li=N1.min,ui=N1.max,gap=TRUE,sfrac=0.003,
@@ -235,7 +241,7 @@ for (delay.mean in delay.means) {
     date.exp <- dates
     quarantine.length <- 10
     ## Set up proportion quarantining
-    load("./prop_quarantine_iso_only.RData")
+    load("./prop_quarantine.RData")
     data.dates <- as.Date(names(prop.q))
     p.q.vec <- c(rep(0,min(data.dates)-min(date.exp)),
                  as.numeric(prop.q),
@@ -270,6 +276,21 @@ for (delay.mean in delay.means) {
         }
         shedding.scaled <- shedding*par[3]/p.d
         nbinom.size <- par[4]
+        ## tryCatch(-sum(dnbinom(N1R1RC.D,size=nbinom.size,
+        ##                         mu=shedding.scaled[date.exp %in% ww.dates.R1D],log=TRUE)) -
+        ##            sum(dnbinom(N1R2RC.D,size=nbinom.size,
+        ##                        mu=shedding.scaled[date.exp %in% ww.dates.R2D],log=TRUE)) -
+        ##            sum(dnbinom(N1R3RC.D,size=nbinom.size,
+        ##                        mu=shedding.scaled[date.exp %in% ww.dates.R3D],log=TRUE)) -
+        ##            sum(pnbinom(LoD95RC.R1ND,size=nbinom.size,
+        ##                        mu=shedding.scaled[date.exp %in% ww.dates.R1ND],log.p=TRUE)) -
+        ##            sum(pnbinom(LoD95RC.R2ND,size=nbinom.size,
+        ##                        mu=shedding.scaled[date.exp %in% ww.dates.R2ND],log.p=TRUE)) -
+        ##            sum(pnbinom(LoD95RC.R3ND,size=nbinom.size,
+        ##                        mu=shedding.scaled[date.exp %in% ww.dates.R3ND],log.p=TRUE)),
+        ##          warning = function(w) {
+        ##              message(c("Warning at parms",par))
+        ##          })
         if (sum(shedding.scaled)) {
             return(-sum(dnbinom(N1R1RC.D,size=nbinom.size,
                                 mu=shedding.scaled[date.exp %in% ww.dates.R1D],log=TRUE)) -
@@ -284,6 +305,7 @@ for (delay.mean in delay.means) {
                    sum(pnbinom(LoD95RC.R3ND,size=nbinom.size,
                                mu=shedding.scaled[date.exp %in% ww.dates.R3ND],log.p=TRUE)))
         } else {
+            print("model all zero")
             return(Inf)
         }
     }
@@ -300,19 +322,22 @@ for (delay.mean in delay.means) {
     upper <- c(shape=1e3,rate=1e3,shedscale=1e5,
                nbinomsize=1e5,p.d=1)#,p.inf.asymp=1)#confint(mle2.profile)[,2]*1.9
     bayesianSetup = createBayesianSetup(LL.dispersion,lower=lower,upper=upper)
+    ## Do 3e5 for 2,5. Or 9e5 for 1 or 0 (converge more slowly)
     mcmc.out = runMCMC(bayesianSetup,
-                       settings=list(iterations=1e5))
+                       settings=list(iterations=9e5))
     pdf(paste0("mcmc_out_quarantine_recovery_",delay.mean,".pdf"))
-    plot(mcmc.out,start = 20000)
+    plot(mcmc.out,start = 1.e5) # 3e4 for 2,5; 1.5e5 for 0,1
     dev.off()
-    samples = getSample(mcmc.out,start=20000)
+    samples = getSample(mcmc.out,start=1.5e5)
     save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
     load(paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
 
     DIC(mcmc.out)$DIC
 
-    ## marginalPlot(mcmc.out, prior = TRUE, start=500)
-
+    ## marginalPlot(mcmc.out, prior = TRUE, start=30000)
+    pdf(paste0("mcmc_correlation_quarantine_recovery_",delay.mean,".pdf"))
+    correlationPlot(mcmc.out,start=1.5e5)
+    dev.off()
     ## gelmanDiagnostics(mcmc.out, plot = T)
 
     ## 4. plot it
@@ -325,6 +350,8 @@ for (delay.mean in delay.means) {
     p.inf.asymp <- rep(0,nrow(samples))#samples[,6]
     shedding <- array(0,dim=c(length(shed.shape),length(n.exp)))
     shed.dist <- array(NA,dim=c(length(shed.shape),maxplot.day+1))
+    ## n.samples <- 1e6
+    ## sampled.rows <- sample(nrow(samples),n.samples,replace=FALSE)
     for (jj in 1:length(shed.shape)) {
         for (ii in 1:(length(n.exp)-1)) {
             cum.dens.0 <- pgamma(0:(length(n.exp)-ii),shed.shape[jj],shed.rate[jj])
@@ -396,19 +423,30 @@ for (delay.mean in delay.means) {
     ## barplot(dnbinom(0:10,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
     ##         names.arg=0:10,
     ##         xlab="Measured viral concentration at peak (N1 GC / l)")
-    barplot(c(pnbinom(99,size=mean(nbinom.size),mu=shed.conc.max),
-              diff(pnbinom(1:10*100-1,size=mean(nbinom.size),mu=shed.conc.max))),
+    shed.conc.max <- max(colMeans(shedding))
+    increment <- 10^floor(log(shed.conc.max,10))
+    mean.group <- floor(shed.conc.max/increment) + 1
+    barplot(c(pnbinom(increment-1,size=mean(nbinom.size),mu=shed.conc.max),
+              diff(pnbinom(1:9*increment-1,size=mean(nbinom.size),mu=shed.conc.max)),
+              1 - pnbinom(9*increment-1,size=mean(nbinom.size),mu=shed.conc.max)),
             ylab="Proportion of samples",
-            names.arg=paste0(seq(0,900,100),"-",seq(100,1000,100)),
-            xlab="Measured viral concentration at peak (N1 GC / l)")
+            names.arg=c(paste0("[",seq(0,8,1),", ",seq(1,9,1),"]"),
+                        expression(paste("[9, ", infinity,"]"))), 
+            col=c(rep("grey",mean.group - 1),"red",rep("grey",10 - mean.group)),
+            xlab=bquote("Predicted recovery-corrected viral concentration (10"^.(log(increment,10))
+                        ~ "N1 GC/l)"))
 
-    dnbinom(0,size=mean(nbinom.size),mu=shed.conc.max)
+    ## dnbinom(0,size=mean(nbinom.size),mu=shed.conc.max)
+    pnbinom(LoD95RC[ww.data$Date == dates[which.max(colMeans(shedding))]],
+            size=mean(nbinom.size),mu=shed.conc.max)
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
     ##dev.off()
     1+(0:30)[which.max(shed.dist.mean[2:(maxplot.day+1)])]
     quantile((0:30)[apply(shed.dist,1,which.max)],c(0.025,0.25,0.75,0.975))
+    quantile(nbinom.size,c(0.025,0.975))
+    mean(nbinom.size)
 
     ##pdf(paste0("shedding_timeseries_pois_",floor(1/delay.rate+0.5),"_mean_delay.pdf"))
     lower95 <- apply(pred,2,function(x)quantile(x,0.025))
@@ -417,7 +455,7 @@ for (delay.mean in delay.means) {
     upper50 <- apply(pred,2,function(x)quantile(x,0.75))
     plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
          ylim=c(0,max(N1.max)),
-         ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
+         ylab="RNA (N1 GC / l)",xlab="Date",las=1,bty="n",col='red',lwd=2)
     ## plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
     ##      ylim=c(0.9*LoD95,max(N1.max)),log="y",
     ##      ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
@@ -425,26 +463,36 @@ for (delay.mean in delay.means) {
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
-    plotCI(ww.data$Date,N1.med,li=N1.min,ui=N1.max,add=TRUE,gap=TRUE,sfrac=0.003)
+    plotCI(ww.data$Date,N1.med.RC,li=N1.min.RC,ui=N1.max.RC,add=TRUE,gap=TRUE,sfrac=0.003)    
     polygon(c(date.exp,rev(date.exp)),c(lower95,
                                         rev(upper95)),
             col=adjustcolor("gray",0.25),border=F)
     polygon(c(date.exp,rev(date.exp)),c(lower50,
                                         rev(upper50)),
             col=adjustcolor("gray",0.5),border=F)
-    for (ii in sample(nrow(pred),1,TRUE)) {
-        other.measurements <- sample(nrow(pred),2,TRUE)
-        points(date.exp,(pred[ii,]+colSums(pred[other.measurements,]))/3,
-               col=adjustcolor("red",0.5))
-    }
+    ## for (ii in sample(nrow(pred),1,TRUE)) {
+    ##     other.measurements <- sample(nrow(pred),2,TRUE)
+    ##     points(date.exp,(pred[ii,]+colSums(pred[other.measurements,]))/3,
+    ##            col=adjustcolor("red",0.5))
+    ## }
     ## for (ii in sample(nrow(pred),10)) {
     ##     lines(date.exp,pred[ii,],col=adjustcolor("red",alpha.f=0.5))
     ## }
     dev.off()
 
+    ww.data$Date[which.max(N1.max)]
+    date.exp[which.max(colMeans(pred))]
+    
     indices <- (dates %in% ww.data$Date)
-    (sum((N1.med <= upper95[indices]) & (N1.med >= lower95[indices])) + sum((N1.min <= upper95[indices]) & (N1.min >= lower95[indices])) + sum((N1.max <= upper95[indices]) & (N1.max >= lower95[indices])))/3/sum(indices)
-    (sum((N1.med <= upper50[indices]) & (N1.med >= lower50[indices])) + sum((N1.min <= upper50[indices]) & (N1.min >= lower50[indices])) + sum((N1.max <= upper50[indices]) & (N1.max >= lower50[indices])))/3/sum(indices)
+    ## Proportion in 95% interval... but this complicated by non-detects
+    (sum((N1.med.RC <= upper95[indices]) & (N1.med.RC >= lower95[indices])) + sum((N1.min.RC <= upper95[indices]) & (N1.min.RC >= lower95[indices])) + sum((N1.max.RC <= upper95[indices]) & (N1.max.RC >= lower95[indices])))/3/sum(indices)
+    (sum((N1.med.RC <= upper50[indices]) & (N1.med.RC >= lower50[indices])) + sum((N1.min.RC <= upper50[indices]) & (N1.min.RC >= lower50[indices])) + sum((N1.max.RC <= upper50[indices]) & (N1.max.RC >= lower50[indices])))/3/sum(indices)
+
+    ## Instead do proportion less than 97.5% and 75%, including non-detects
+    (sum((N1.med <= upper95[indices])) + sum((N1.min <= upper95[indices])) + sum((N1.max <= upper95[indices])))/3/sum(indices)
+    (sum((N1.med <= upper50[indices])) + sum((N1.min <= upper50[indices])) + sum((N1.max <= upper50[indices])))/3/sum(indices)
+
+    ## correlations
     cor(colMeans(pred)[indices],N1.mean,method="spearman")
     quantile(apply(pred[,indices],1,function(x)cor(x,N1.mean)),c(0.025,0.975))
 
@@ -452,7 +500,7 @@ for (delay.mean in delay.means) {
     pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,"_log.pdf"),width=10,height=10)
     layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
     plot(0:maxplot.day, shed.dist.mean * (1 - p.enter + p.exit),
-         type='l', ylim=c(0.9*min(LoD95RC),
+         type='l', ylim=c(min(shed.dist.mean[2:maxplot.day] * (1 - p.enter + p.exit)),
                           max(apply(shed.dist[,2:(maxplot.day+1)],2,function(x)quantile(x,0.975)))),
          ylab="Shedding intensity (N1 GC / l)",xlab="Time since infection",yaxs="i",las=1,bty="n",
          col="red",lwd=2,log="y")
@@ -461,42 +509,54 @@ for (delay.mean in delay.means) {
     mtext("A",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
-    polygon(c(0:30,30:0),c(apply(shed.dist[,],2,function(x)quantile(x,0.025)),
+    polygon(c(0:30,30:0),c(pmax(apply(shed.dist[,],2,function(x)quantile(x,0.025)),1e-5),
                            rev(apply(shed.dist[,],2,function(x)quantile(x,0.975)))),
             col=adjustcolor("gray",0.5),border=F)
     abline(v=which.max(colMeans(shed.dist[,2:(maxplot.day+1)])),lty="dashed")
-    shed.conc.max <- max(colMeans(shedding))
-    barplot(dnbinom(0:10,size=mean(nbinom.size),mu=shed.conc.max),ylab="Proportion of samples",
-            names.arg=0:10,
-            xlab="Measured viral concentration at peak (N1 GC / l)")
+    barplot(c(pnbinom(increment-1,size=mean(nbinom.size),mu=shed.conc.max),
+              diff(pnbinom(1:9*increment-1,size=mean(nbinom.size),mu=shed.conc.max)),
+              1 - pnbinom(9*increment-1,size=mean(nbinom.size),mu=shed.conc.max)),
+            ylab="Proportion of samples",
+            names.arg=c(paste0("[",seq(0,8,1),", ",seq(1,9,1),"]"),
+                        expression(paste("[9, ", infinity,"]"))), 
+            col=c(rep("grey",mean.group - 1),"red",rep("grey",10 - mean.group)),
+            xlab=bquote("Predicted recovery-corrected viral concentration (10"^.(log(increment,10))
+                        ~ "N1 GC/l)"))
+    ## barplot(c(pnbinom(99999,size=mean(nbinom.size),mu=shed.conc.max),
+    ##           diff(pnbinom(1:10*1e5-1,size=mean(nbinom.size),mu=shed.conc.max))),
+    ##         ylab="Proportion of samples",
+    ##         names.arg=paste0("[",seq(0,9,1),", ",seq(1,10,1),"]"),
+    ##         col=c(rep("grey",2),"red",rep("grey",7)),
+    ##         xlab=expression(paste("Measured recovery-corrected viral concentration at peak (10"
+    ##                               ^5, " N1 GC / l)")))
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
     plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
-         ylim=c(0.9*LoD95,max(N1.max)),log="y",
-         ylab="RNA (N1 GC / 100ml)",xlab="Date",las=1,bty="n",col='red',lwd=2)
-    lines(ww.data$Date,LoD95RC/3,lty="dashed")
+         ylim=c(min(N1.min.RC),max(N1.max)),log="y",
+         ylab="RNA (N1 GC / l)",xlab="Date",las=1,bty="n",col='red',lwd=2)
+    lines(ww.data$Date,LoD95RC,lty="dashed")
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
           cex=1.2)
-    plotCI(ww.data$Date,ifelse(N1.med<LoD95,LoD95,N1.med),
-           li=ifelse(N1.max<LoD95,LoD95,N1.max),ui=ifelse(N1.max<LoD95,LoD95,N1.max),
+    plotCI(ww.data$Date,N1.med.RC,
+           li=N1.min.RC,ui=N1.max.RC,
            add=TRUE,gap=TRUE,sfrac=0.003)
-    lower95 <- ifelse(lower95<LoD95,LoD95,lower95)
-    upper95 <- ifelse(upper95<LoD95,LoD95,upper95)
-    lower50 <- ifelse(lower50<LoD95,LoD95,lower50)
-    upper50 <- ifelse(upper95<LoD95,LoD95,upper50)
+    lower95 <- ifelse(lower95<LoD95,LoD95/2,lower95)
+    upper95 <- ifelse(upper95<LoD95,LoD95/2,upper95)
+    lower50 <- ifelse(lower50<LoD95,LoD95/2,lower50)
+    upper50 <- ifelse(upper95<LoD95,LoD95/2,upper50)
     polygon(c(date.exp,rev(date.exp)),
             c(lower95,rev(upper95)),
             col=adjustcolor("gray",0.25),border=F)
     polygon(c(date.exp,rev(date.exp)),
             c(lower50,rev(upper50)),
             col=adjustcolor("gray",0.5),border=F)
-    for (ii in sample(nrow(pred),1,TRUE)) {
-        other.measurements <- sample(nrow(pred),2,TRUE)
-        points(date.exp,(pred[ii,]+colSums(pred[other.measurements,]))/3,
-               col=adjustcolor("red",0.5))
-    }
+    ## for (ii in sample(nrow(pred),1,TRUE)) {
+    ##     other.measurements <- sample(nrow(pred),2,TRUE)
+    ##     points(date.exp,(pred[ii,]+colSums(pred[other.measurements,]))/3,
+    ##            col=adjustcolor("red",0.5))
+    ## }
     dev.off()    
 
 }

@@ -175,20 +175,19 @@ dev.off()
 ### Example incidence curves with shedding dists
 delay.mean <- 2
 delay.rate <- 1/delay.mean
-load(paste0("mcmc_delay_pois",floor(1/delay.rate+0.5),".RData"),verbose=TRUE)
+load(paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"),verbose=TRUE)
 load(paste0("nexp_delay_pois",floor(1/delay.rate+0.5),".RData"),verbose=TRUE)
 inc.meanlog <- 1.621
 inc.sdlog <- 0.418
 
-    
 n.exp.ex1 <- c(n.exp[1:54],n.exp[54:39],rep(0,length(n.exp)-54-54+38))
 n.exp.ex2 <- c(n.exp[1:which(dates == as.Date("2020-10-01"))],
                n.exp[44:(43 + length(n.exp) - which(dates == as.Date("2020-10-01")))])
 n.exp.ex3 <- c(n.exp[1:60],rep(n.exp[60],45)*(1+0.05*sin((45/5+1:45)*2*pi/(45/2.5))),
                n.exp[48:(48+length(n.exp)-105-1)])
-n.exp.ex4 <- c(n.exp[1:60],
-               rep(n.exp[60],
-                   length(n.exp)-60)*(1+0.05*sin((45/5+1:(length(n.exp)-60))*2*pi/(45/2.5))))
+n.exp.ex4 <- c(n.exp[1:57],
+               rep(n.exp[57],
+                   length(n.exp)-57)*(1+0.05*sin((45/5+1:(length(n.exp)-57))*2*pi/(45/2.5))))
 plot(dates,n.exp.ex4)
 
 n.exp.list <- list(n.exp.ex1,n.exp.ex2,n.exp.ex3,n.exp.ex4)
@@ -236,23 +235,19 @@ n.exp.list <- list(n.exp.ex1,n.exp.ex2,n.exp.ex3,n.exp.ex4)
 pdf("shedding_dist_example_incidences.pdf")
 par(mfrow=c(2,2))
 for (iii in 1:length(n.exp.list)) {
+    print(iii)
     n.exp <- n.exp.list[[iii]]
-    pars <- exp(samples)
-    shed.shape <- 1 + pars[,1]
-    shed.rate <- pars[,2]
-    shed.scale <- pars[,3]
+    pars <- samples
+    shed.shape <- mean(pars[,1])
+    shed.rate <- mean(pars[,2])
+    shed.scale <- mean(pars[,3])
     maxplot.day <- 30
-    nbinom.size <- pars[,4]
-    shedding <- array(0,dim=c(length(shed.shape),length(n.exp)))
-    shed.dist <- array(NA,dim=c(length(shed.shape),maxplot.day+1))
-    for (jj in 1:length(shed.shape)) {
-        for (ii in 1:(length(n.exp)-1)) {
-            cum.dens.0 <- pgamma(0:(length(n.exp)-ii),shed.shape[jj],shed.rate[jj])
-            cum.dens.1 <- pgamma(1:(length(n.exp)-ii+1),shed.shape[jj],shed.rate[jj])
-            shedding[jj,] <- shedding[jj,] + shed.scale[jj]*n.exp[ii]*c(rep(0,ii-1),
-                                                                        cum.dens.1-cum.dens.0)
-        }
-        shed.dist[jj,] <- dgamma(0:maxplot.day,shed.shape[jj],shed.rate[jj])*shed.scale[jj]
+    shedding <- array(0,dim=c(1,length(n.exp)))
+    for (ii in 1:(length(n.exp)-1)) {
+        cum.dens.0 <- pgamma(0:(length(n.exp)-ii),shed.shape,shed.rate)
+        cum.dens.1 <- pgamma(1:(length(n.exp)-ii+1),shed.shape,shed.rate)
+        shedding[1,] <- shedding[1,] + shed.scale*n.exp[ii]*c(rep(0,ii-1),
+                                                              cum.dens.1-cum.dens.0)
     }
     par(mar=0.1+c(5,4,4,5))
     plot(dates[which(dates==as.Date("2020-07-20")):length(dates)],
@@ -273,5 +268,4 @@ for (iii in 1:length(n.exp.list)) {
     axis(4,las=1)
     mtext("RNA (N1 GC / 100ml)",4,3)
 }
-dev.off(
-)
+dev.off()
