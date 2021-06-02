@@ -261,11 +261,12 @@ for (iii in 1:length(n.exp.list)) {
     }
     par(new=TRUE)
     plot(dates[which(dates==as.Date("2020-07-20")):length(dates)],
-         colMeans(shedding)[which(dates==as.Date("2020-07-20")):length(dates)],
+         colMeans(shedding)[which(dates==as.Date("2020-07-20")):length(dates)]/10^5,
          type='l',col=viridis(3)[2],
          lwd=2,bty="n",xaxs="i",yaxs="i",las=1,yaxt="n",xlab="",ylab="",
-         xaxt="n",ylim=c(0,max(colMeans(shedding))))
+         xaxt="n",ylim=c(0,1e-5*max(colMeans(shedding))))
     axis(4,las=1)
-    mtext("RNA (N1 GC / 100ml)",4,3)
+    mtext(bquote("RNA (10"^.(5)
+                 ~ "N1 GC/l)"),4,3,cex=0.75)
 }
 dev.off()

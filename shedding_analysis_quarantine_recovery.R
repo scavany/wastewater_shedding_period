@@ -21,7 +21,7 @@ for (delay.mean in delay.means) {
     test.type[test.type != "Symptomatic"] = "Asymptomatic"
     incid <- incidence(as.Date(dates.onset), groups = test.type)
     ## Open figure 1
-    pdf(paste0("Fig1_recovery_",delay.mean,".pdf"),height=10,width=10)
+    pdf(paste0("Fig1_recovery_",delay.mean,".pdf"),height=6.92,width=6.92,pointsize=10)
     layout(matrix(c(1,2,3,2),nrow=2))
     barplot.out <- barplot(t(incid$counts)[2:1,],las=1,col=c("black","dark gray"),
                            border=FALSE)
@@ -31,13 +31,13 @@ for (delay.mean in delay.means) {
     label.locs <- which(incid$dates %in% seq(as.Date("2020-08-16"),as.Date("2021-11-16"),"1 month"))
     axis(1,at=barplot.out[label.locs],
          labels=c("Aug","Sep","Oct","Nov"),tick=FALSE)
-    mtext("Date",side=1,line=3,cex=1)
-    mtext("Cases",side=2,line=3,cex=1)
+    mtext("Date",side=1,line=3,cex=3/4)
+    mtext("Cases",side=2,line=3,cex=3/4)
     legend("center",bty="n",legend=c("Symptomatic","Non-symptomatic"),
            fill=c("black","gray"),border=FALSE)
     mtext("A",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     abline(v=0,lty="dotted",lwd=2)
     text(-3,75,"Students returning",srt=90)
     cooling.period <- which(incid$dates %in% c(as.Date("2020-08-19"),as.Date("2020-09-02")))
@@ -159,7 +159,7 @@ for (delay.mean in delay.means) {
            legend=c("Symptomatic cases","Infections","Predicted Cases"),bty="n",border=c("black",NA,NA),lwd=c(NA,3,3))
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     ## plot(sts.asymp.bp,xaxis.labelFormat=NULL,legend=NULL,lwd=c(1,1,2),lty=c(1,1,1),main="",
     ##      xaxs="i",bty="n",yaxs="i",las=1,xlim=c(30,nrow(sts.symp.bp)),xaxt="n",xlab="Date")
     ## tick.locs <- which(dates %in% seq(as.Date("2020-07-01"),as.Date("2021-01-01"),"1 month"))
@@ -207,9 +207,10 @@ for (delay.mean in delay.means) {
     N1.mean.RC <- (N1.med.RC + N1.min.RC + N1.max.RC)/3
 
     ## pdf("wastewater_data.pdf")
-    plotCI(ww.data$Date,N1.med,li=N1.min,ui=N1.max,gap=TRUE,sfrac=0.003,
-           xlab="Date",ylab="RNA (N1 GC / l)",xaxs="i",bty="n",las=1,
-           xaxt="n")
+    plotCI(ww.data$Date,N1.med/1e6,li=N1.min/1e6,ui=N1.max/1e6,gap=TRUE,sfrac=0.003,
+           xlab="Date",ylab="",
+           xaxs="i",bty="n",las=1,xaxt="n")
+    mtext(bquote("RNA (10"^6 ~ "N1 GC/l)"),2,3,cex=3/4)
     axis(1,label=FALSE, tcl=0)
     tick.locs <- which(ww.data$Date %in% seq(as.Date("2020-07-01"),as.Date("2021-01-01"),"1 month"))
     axis(1,at=ww.data$Date[tick.locs],label=FALSE)
@@ -234,7 +235,7 @@ for (delay.mean in delay.means) {
     ##         c(LoD95,LoD95,1.5e6,1.5e6),border=FALSE,col=adjustcolor("lightblue",0.3))
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     dev.off()
 
     ## 2. MCMC fitting with BayesianTools
@@ -326,7 +327,7 @@ for (delay.mean in delay.means) {
     mcmc.out = runMCMC(bayesianSetup,
                        settings=list(iterations=9e5))
     pdf(paste0("mcmc_out_quarantine_recovery_",delay.mean,".pdf"))
-    plot(mcmc.out,start = 1.e5) # 3e4 for 2,5; 1.5e5 for 0,1
+    plot(mcmc.out,start = 1.5e5) # 3e4 for 2,5; 1.5e5 for 0,1
     dev.off()
     samples = getSample(mcmc.out,start=1.5e5)
     save(mcmc.out,samples,file=paste0("mcmc_quarantine_recovery_lod_delay_pois",floor(1/delay.rate+0.5),".RData"))
@@ -350,6 +351,7 @@ for (delay.mean in delay.means) {
     p.inf.asymp <- rep(0,nrow(samples))#samples[,6]
     shedding <- array(0,dim=c(length(shed.shape),length(n.exp)))
     shed.dist <- array(NA,dim=c(length(shed.shape),maxplot.day+1))
+
     ## n.samples <- 1e6
     ## sampled.rows <- sample(nrow(samples),n.samples,replace=FALSE)
     for (jj in 1:length(shed.shape)) {
@@ -394,7 +396,7 @@ for (delay.mean in delay.means) {
 
     ## plot it
     ## pdf(paste0("shedding_distribution_pois_",floor(1/delay.rate+0.5),"_mean_delay.pdf"))
-    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,".pdf"),width=10,height=10)
+    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,".pdf"),width=6.92,height=6.92,pointsize=10)
     layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
     p.enter <- p.inf2test(0:(ncol(shed.dist)-1))
     p.exit <- c(rep(0,quarantine.length),
@@ -414,7 +416,7 @@ for (delay.mean in delay.means) {
     ## lines(0:maxplot.day,apply(shed.dist,2,median),lwd=2)
     mtext("A",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     polygon(c(0:30,30:0),c(apply(shed.dist[,],2,function(x)quantile(x,0.025)),
                            rev(apply(shed.dist[,],2,function(x)quantile(x,0.975)))),
             col=adjustcolor("gray",0.5),border=F)
@@ -441,7 +443,7 @@ for (delay.mean in delay.means) {
             size=mean(nbinom.size),mu=shed.conc.max)
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     ##dev.off()
     1+(0:30)[which.max(shed.dist.mean[2:(maxplot.day+1)])]
     quantile((0:30)[apply(shed.dist,1,which.max)],c(0.025,0.25,0.75,0.975))
@@ -462,7 +464,7 @@ for (delay.mean in delay.means) {
     ## abline(h=LoD95,lty="dashed")
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     plotCI(ww.data$Date,N1.med.RC,li=N1.min.RC,ui=N1.max.RC,add=TRUE,gap=TRUE,sfrac=0.003)    
     polygon(c(date.exp,rev(date.exp)),c(lower95,
                                         rev(upper95)),
@@ -497,7 +499,8 @@ for (delay.mean in delay.means) {
     quantile(apply(pred[,indices],1,function(x)cor(x,N1.mean)),c(0.025,0.975))
 
 
-    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,"_log.pdf"),width=10,height=10)
+    pdf(paste0("Fig2_quarantine_recovery_lod_",delay.mean,"_log.pdf"),width=6.92,height=6.92,
+        pointsize=10)
     layout(matrix(c(1,2,3,3),byrow=TRUE,nrow=2))
     plot(0:maxplot.day, shed.dist.mean * (1 - p.enter + p.exit),
          type='l', ylim=c(min(shed.dist.mean[2:maxplot.day] * (1 - p.enter + p.exit)),
@@ -508,7 +511,7 @@ for (delay.mean in delay.means) {
     lines(0:maxplot.day,shed.dist.mean,lwd=2)
     mtext("A",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     polygon(c(0:30,30:0),c(pmax(apply(shed.dist[,],2,function(x)quantile(x,0.025)),1e-5),
                            rev(apply(shed.dist[,],2,function(x)quantile(x,0.975)))),
             col=adjustcolor("gray",0.5),border=F)
@@ -531,14 +534,14 @@ for (delay.mean in delay.means) {
     ##                               ^5, " N1 GC / l)")))
     mtext("B",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     plot(date.exp,colMeans(pred),type='l',xlim=c(min(ww.data$Date),max(ww.data$Date)),
          ylim=c(min(N1.min.RC),max(N1.max)),log="y",
          ylab="RNA (N1 GC / l)",xlab="Date",las=1,bty="n",col='red',lwd=2)
     lines(ww.data$Date,LoD95RC,lty="dashed")
     mtext("C",side=3,line=0, 
           at=par("usr")[1]+0.05*diff(par("usr")[1:2]),
-          cex=1.2)
+          cex=1)
     plotCI(ww.data$Date,N1.med.RC,
            li=N1.min.RC,ui=N1.max.RC,
            add=TRUE,gap=TRUE,sfrac=0.003)
@@ -559,4 +562,11 @@ for (delay.mean in delay.means) {
     ## }
     dev.off()    
 
+    ## Calculate the probability that the incubation period is completed before the peak in shedding
+    mean(plnorm((shed.shape-1)/shed.rate,inc.meanlog,inc.sdlog))
+    quantile(plnorm((shed.shape-1)/shed.rate,inc.meanlog,inc.sdlog),c(0.025,0.975))
+
+    ## Calculate the proportion of shedding which is after the incubation period
+    1 - mean(pgamma(rlnorm(1e6,inc.meanlog,inc.sdlog),mean(shed.shape),mean(shed.rate)))
+    1 - quantile(pgamma(rlnorm(1e6,inc.meanlog,inc.sdlog),mean(shed.shape),mean(shed.rate)),c(0.025,0.975))
 }
