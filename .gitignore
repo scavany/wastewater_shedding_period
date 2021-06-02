@@ -7,3 +7,15 @@
 *tif
 *RData
 *png
+Elkhart*.csv
+ND*WW*csv
+ND*Epi*csv
+NDCampus_ddPCRdata_cleanedrawdata.csv
+convolution_fn.R
+shedding_analysis.R
+shedding_analysis_fit_delay.R
+shedding_analysis_lnorm.R
+shedding_analysis_quarantine.R
+shedding_analysis_quarantine_recovery_asymp.R
+shedding_old_with_R0.R
+wastewater_data.R
